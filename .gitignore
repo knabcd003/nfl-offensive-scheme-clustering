@@ -1,0 +1,28 @@
+# PDFs (project docs, spec, proposal)
+*.pdf
+
+# Jupyter
+.ipynb_checkpoints/
+*.pyc
+__pycache__/
+
+# Python environment
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Data files (large raw CSVs/parquet from nflreadpy)
+data/
+data_cache/
+*.csv
+*.parquet
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
