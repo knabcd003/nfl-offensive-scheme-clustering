@@ -55,7 +55,22 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 5. Regular-Season Target Normalization, Franchise Aliases, and Exact Calendar Joins
+### 5. Feature Distribution Auditing, Skewness, and Extreme Tactical Outliers
+
+* **Initial Plan:** Standardize the 7 tactical features and proceed directly to clustering without inspecting their empirical distributions or searching for multivariate outliers.
+* **What We Noticed:** Upon deeper exploratory analysis, we audited the parametric shapes, central tendencies, and extremes of all 7 features across the 608 team-seasons (2006–2024):
+  1. *Severe tempo skewness:* `no_huddle_rate` exhibited extreme right-skewness ($\text{skew} = 3.50$). While the median NFL offense ran no-huddle on just $3.4\%$ of neutral plays, a handful of radical tempo innovators pushed rates above $60\%–70\%$.
+  2. *Near-Gaussian passing metrics:* In contrast, `air_yards_per_att` ($\text{skew} = 0.11$, mean $8.05$ yards) and `pass_rate` ($\text{skew} = -0.21$, mean $57.7\%$) displayed smooth, symmetrical distributions.
+  3. *Identifying historical tactical anomalies ($|Z| > 3.0$):* Inspecting standardized boxplots revealed that statistical outliers directly corresponded to identifiable, extreme schemes in NFL history:
+     * *Pace outliers:* 2013–2015 Philadelphia Eagles under Chip Kelly ($+3.50\sigma$ to $+3.70\sigma$ tempo), 2010 Indianapolis Colts under Peyton Manning ($+4.58\sigma$ tempo), and 2019–2022 Arizona Cardinals under Kliff Kingsbury ($+3.66\sigma$ to $+4.09\sigma$ tempo).
+     * *Formation outliers:* 2007 New England Patriots ($+3.26\sigma$ shotgun rate), pioneering full-time spread formations during their 16–0 season.
+     * *Run-heavy outliers:* 2011 Denver Broncos with Tim Tebow ($39.8\%$ pass rate, $-3.18\sigma$), running a college-style option ground attack.
+     * *Interior power run outliers:* 2008–2009 Jacksonville Jaguars with Maurice Jones-Drew and Fred Taylor ($+3.05\sigma$ interior rush share).
+* **Technical Resolution:** We incorporated 7-panel distribution histograms with KDE curves, summary statistics tables (reporting mean, standard deviation, median, IQR, and skewness), and standardized boxplots into the data exploration section. This confirmed that our features are bounded and physiologically sound (no negative air yards or rates outside $[0, 1]$), while explaining the geometric mechanism of downstream clustering: the heavy right-tail of tempo naturally separates the rare "Shotgun / No-Huddle" archetype (Cluster 1, $\sim 8\%$) from the broader league.
+
+---
+
+### 6. Regular-Season Target Normalization, Franchise Aliases, and Exact Calendar Joins
 
 * **Initial Plan:** Aggregate seasonal team performance (net points per game) from the full schedule table and use pandas positional `shift(-1)` to align year $t$ with year $t+1$.
 * **What We Noticed:** 
@@ -69,7 +84,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 6. Multi-Algorithm Clustering and Statistical Significance Testing
+### 7. Multi-Algorithm Clustering and Statistical Significance Testing
 
 * **Initial Plan:** Run K-Means, select $k$ via an elbow plot, and proceed to downstream modeling.
 * **What We Noticed:** Clustering algorithms can partition random continuous data into visually distinct clusters. We needed to verify whether these tactical groupings represented true geometric structure or arbitrary divisions of a continuous space.
@@ -81,7 +96,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 7. Archetype Index Realignment and Label Verification
+### 8. Archetype Index Realignment and Label Verification
 
 * **What We Noticed:** After fixing the scramble dropback calculation in the feature matrix, running `KMeans(n_clusters=3, random_state=42)` produced a slight index permutation in the resulting cluster labels: Cluster 0 remained the large short-passing cluster ($52.5\%$), but Cluster 1 was assigned to the high-tempo shotgun cluster ($8.1\%$), and Cluster 2 was assigned to the deep vertical passing cluster ($39.5\%$).
 * **Technical Resolution:** We verified the coordinates of the new cluster centroids and updated the dictionary mapping to ensure descriptive accuracy:
@@ -96,7 +111,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 8. Preventing Unsupervised Data Leakage in Cross-Validation
+### 9. Preventing Unsupervised Data Leakage in Cross-Validation
 
 * **Initial Plan:** Fit a single `KMeans(n_clusters=3)` on all 608 team-seasons (2006–2024), compute Euclidean distances to those three centroids, and pass those pre-computed distance columns into the expanding-window cross-validation loop.
 * **What We Noticed:** This introduced **unsupervised lookahead leakage**: when evaluating models on 2011–2013 data, the cluster centroids were calculated from data that included the 2020s. Test folds were being projected onto geometric coordinates informed by future football.
@@ -111,7 +126,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 9. QB Continuity Controls: Forecasting vs. Retrospective Benchmark
+### 10. QB Continuity Controls: Forecasting vs. Retrospective Benchmark
 
 * **Initial Plan:** Treat quarterback stability as a standard forward-looking feature alongside offensive style when predicting next season's performance ($Y_{t+1}$), identifying QBs by their displayed text names.
 * **What We Noticed:** 
@@ -127,7 +142,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 10. Econometric Modeling of Strategy Decay and Serial Autocorrelation
+### 11. Econometric Modeling of Strategy Decay and Serial Autocorrelation
 
 * **Initial Plan:** Regress each archetype's annual win premium on its league-wide adoption rate via Ordinary Least Squares (OLS) to test if copycat adoption erodes competitive advantage.
 * **What We Noticed:** Ordinary Least Squares (OLS) on stacked time-series panels violates standard independence assumptions due to serial correlation in the error terms, which can artificially inflate $t$-statistics. Additionally, `statsmodels.regression.linear_model.GLSAR` threw a runtime `KeyError: 1` when extracting parameters because `sm.add_constant()` produces a pandas Series with named indices (`'const'`, `'adoption_rate'`).
@@ -141,7 +156,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 ---
 
-### 11. Acceptance of the Null Hypothesis in Supervised Modeling
+### 12. Acceptance of the Null Hypothesis in Supervised Modeling
 
 * **Initial Expectation:** Tactical scheme archetypes were hypothesized to provide incremental predictive information over past point differential when forecasting future team performance.
 * **What the Data Showed:** Across Ridge Regression, Random Forest, and LightGBM, adding tactical scheme features consistently worsened out-of-sample error and lowered $R^2$ compared to past performance and quarterback stability alone.
