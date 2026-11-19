@@ -25,7 +25,7 @@ Each section details a specific technical divergence from our initial setup: wha
 ### 2. Isolating Strategic Intent from Macroeconomic Secular Drift
 
 * **Initial Plan:** Cluster offenses on absolute tactical frequencies (e.g., raw pass rate, raw shotgun rate, raw no-huddle rate).
-* **What We Noticed:** Inspecting league-wide historical trends revealed massive secular drift: neutral-situation shotgun snap rates surged from under $10\%$ in 2002 to nearly $70\%$ by 2024, and pass rates climbed from $54\%$ to over $60\%$. Clustering on raw rates resulted in unsupervised algorithms grouping teams primarily by *era* rather than tactical philosophy.
+* **What We Noticed:** Inspecting league-wide historical trends revealed massive secular drift: neutral-situation shotgun snap rates surged from under $10\%$ in 2002 to $67\%$ by 2024, while the neutral dropback rate moved only within roughly $55\%$–$59\%$. Clustering on raw rates resulted in unsupervised algorithms grouping teams primarily by *era* rather than tactical philosophy.
 * **Technical Resolution:** We implemented **within-season Z-score standardization**:
   $$Z_{i,t} = \frac{x_{i,t} - \mu_{\text{season}, t}}{\sigma_{\text{season}, t}}$$
   In this standardized space, a positive value indicates tactical divergence relative to contemporary peers that specific season. A $50\%$ shotgun rate in 2003 represents a heavy spread outlier ($+2.8\sigma$), whereas a $50\%$ shotgun rate in 2023 represents a run-heavy set ($-1.9\sigma$). This decoupled organizational tactical identity from league-wide macro drift.
@@ -43,7 +43,7 @@ Each section details a specific technical divergence from our initial setup: wha
   4. `air_yards_per_att` (intended downfield aggression)
   5. `deep_target_rate` (proportion of throws traveling $\ge 15$ yards)
   6. `positional_target_conc` (spatial dispersion of targets across field zones via HHI)
-  7. `rush_direction_conc` (proportion of runs directed between the tackles)
+  7. `rush_direction_conc` (proportion of runs charted up the middle; nflverse `run_location` is only left, middle, or right)
 
 ---
 
@@ -51,7 +51,7 @@ Each section details a specific technical divergence from our initial setup: wha
 
 * **Initial Plan:** Calculate offensive pass rate using `play_type == 'pass'`.
 * **What We Noticed:** In official NFL box scores and raw play-by-play logs, quarterback scrambles are recorded with `play_type == 'run'`. Filtering on `play_type == 'pass'` inadvertently treated all 9,448 QB scrambles in our neutral sample as designed running plays. Teams with mobile quarterbacks (e.g., Michael Vick, Cam Newton, Lamar Jackson, Josh Allen) were artificially skewed toward appearing like run-heavy ground schemes, even though the called play was an intended pass.
-* **Technical Resolution:** We reclassified all plays where `qb_scramble == 1` as dropbacks (`qb_dropback = 1`) and defined our pass-rate feature as `grp['qb_dropback'].fillna(0).mean()`. This properly attributed intended passing plays to passing volume regardless of whether the play ended in a pass attempt, a sack, or a scramble.
+* **Technical Resolution:** We reclassified all plays where `qb_scramble == 1` as dropbacks (`qb_dropback = 1`) and defined our pass-rate feature as `grp['qb_dropback'].fillna(0).mean()`. This properly attributed intended passing plays to passing volume regardless of whether the play ended in a pass attempt, a sack, or a scramble. Note: nflverse's `qb_dropback` already flags scrambles, so the change that mattered was measuring pass rate with `qb_dropback` instead of `play_type == 'pass'`; the explicit reclassification is a safeguard.
 
 ---
 
@@ -65,8 +65,8 @@ Each section details a specific technical divergence from our initial setup: wha
      * *Pace outliers:* 2013–2015 Philadelphia Eagles under Chip Kelly ($+3.50\sigma$ to $+3.70\sigma$ tempo), 2010 Indianapolis Colts under Peyton Manning ($+4.58\sigma$ tempo), and 2019–2022 Arizona Cardinals under Kliff Kingsbury ($+3.66\sigma$ to $+4.09\sigma$ tempo).
      * *Formation outliers:* 2007 New England Patriots ($+3.26\sigma$ shotgun rate), pioneering full-time spread formations during their 16–0 season.
      * *Run-heavy outliers:* 2011 Denver Broncos with Tim Tebow ($39.8\%$ pass rate, $-3.18\sigma$), running a college-style option ground attack.
-     * *Interior power run outliers:* 2008–2009 Jacksonville Jaguars with Maurice Jones-Drew and Fred Taylor ($+3.05\sigma$ interior rush share).
-* **Technical Resolution:** We incorporated 7-panel distribution histograms with KDE curves, summary statistics tables (reporting mean, standard deviation, median, IQR, and skewness), and standardized boxplots into the data exploration section. This confirmed that our features are bounded and physiologically sound (no negative air yards or rates outside $[0, 1]$), while explaining the geometric mechanism of downstream clustering: the heavy right-tail of tempo naturally separates the rare "Shotgun / No-Huddle" archetype (Cluster 1, $\sim 8\%$) from the broader league.
+     * *Up-the-middle run outliers:* 2008–2009 Jacksonville Jaguars with Maurice Jones-Drew and Fred Taylor ($+3.05\sigma$ middle run share).
+* **Technical Resolution:** We incorporated 7-panel distribution histograms with KDE curves, summary statistics tables (reporting mean, standard deviation, median, IQR, and skewness), and standardized boxplots into the data exploration section. This confirmed that our features are bounded and physiologically sound (no negative air yards or rates outside $[0, 1]$), while explaining the geometric mechanism of downstream clustering: the heavy right-tail of tempo naturally separates the rare "Shotgun / No-Huddle" archetype ($\sim 8\%$) from the broader league.
 
 ---
 
@@ -91,23 +91,15 @@ Each section details a specific technical divergence from our initial setup: wha
 * **Technical Resolution:** 
   1. Evaluated three distinct clustering families across $k=2\dots 6$: K-Means, Ward Agglomerative Hierarchical, and Gaussian Mixture Models (GMM), tracking Silhouette Score, Davies-Bouldin Index, and GMM BIC.
   2. Plotted a truncated Ward linkage dendrogram to inspect the hierarchical merge distances.
-  3. Executed a **500-sample bootstrap stability test**, confirming cluster stability with a mean Adjusted Rand Index (ARI) of $0.709$ (exceeding the standard $0.70$ stability threshold).
-  4. Executed a **1,000-iteration column-permutation null test**: shuffling feature columns independently to destroy correlation structure confirmed that our empirical silhouette score ($0.1864$) significantly exceeded the 99th percentile of synthetic null noise ($0.1300$, $p < 0.01$).
+  3. Executed a **500-sample bootstrap stability test**, confirming cluster stability with a mean Adjusted Rand Index (ARI) of $0.714$ (exceeding the standard $0.70$ stability threshold).
+  4. Executed a **1,000-iteration column-permutation null test**: shuffling feature columns independently to destroy correlation structure confirmed that our empirical silhouette score ($0.1865$) significantly exceeded the 99th percentile of synthetic null noise ($0.1306$, $p < 0.01$).
 
 ---
 
 ### 8. Archetype Index Realignment and Label Verification
 
-* **What We Noticed:** After fixing the scramble dropback calculation in the feature matrix, running `KMeans(n_clusters=3, random_state=42)` produced a slight index permutation in the resulting cluster labels: Cluster 0 remained the large short-passing cluster ($52.5\%$), but Cluster 1 was assigned to the high-tempo shotgun cluster ($8.1\%$), and Cluster 2 was assigned to the deep vertical passing cluster ($39.5\%$).
-* **Technical Resolution:** We verified the coordinates of the new cluster centroids and updated the dictionary mapping to ensure descriptive accuracy:
-  ```python
-  ARCHETYPES = {
-      0: 'Short-Depth Passing',
-      1: 'Shotgun / No-Huddle',
-      2: 'Deep Vertical Passing'
-  }
-  ```
-  This ensured that all longitudinal area plots, transition heatmaps, and strategy decay regressions accurately reflected the mathematical centroid coordinates.
+* **What We Noticed:** K-Means cluster numbers are arbitrary: `KMeans(n_clusters=3, random_state=42)` can assign the same three groups to different label numbers after any change to the feature matrix or library version. An earlier hard-coded mapping (`{0: 'Short-Depth Passing', 1: 'Shotgun / No-Huddle', 2: 'Deep Vertical Passing'}`) went stale: in the saved outputs, cluster 0 had the high no-huddle centroid ($+2.62\sigma$), cluster 1 the deep-passing centroid ($+0.91\sigma$ air yards), and cluster 2 the short-passing centroid ($-0.66\sigma$ air yards). The trend, PCA, Markov, and decay plots were therefore labeled with the wrong archetype names, although the name-to-share pairs in the text (Short-Depth $52.5\%$, Shotgun / No-Huddle $8.1\%$, Deep Vertical $39.5\%$) were correct.
+* **Technical Resolution:** Archetype names are now assigned from the fitted centroids instead of by index: the cluster with the highest no-huddle centroid is Shotgun / No-Huddle, the remaining cluster with the highest air-yards centroid is Deep Vertical Passing, and the last is Short-Depth Passing. All plots and labels use this derived `ARCHETYPES` mapping, so they stay correct if the label numbers change.
 
 ---
 
@@ -136,8 +128,8 @@ Each section details a specific technical divergence from our initial setup: wha
 * **Technical Resolution:** 
   * Identified each team's primary passer in the neutral sample using unique `passer_player_id` keys.
   * Separated our supervised evaluation into two distinct benchmarks:
-    1. **Pure Forecasting Comparison (Ex-ante inputs only):** Comparing past performance ($Y_t$) against past performance plus style ($Y_t$ + Style). Adding style worsened Ridge RMSE from $5.581$ to $5.666$ ($R^2$ dropped from $0.169$ to $0.145$). Tactical style does not improve forward-looking forecasts.
-    2. **Retrospective Explanatory Comparison (Controlling for realized QB health):** Comparing $Y_t$ + realized QB continuity against that baseline plus style. Realized QB continuity noticeably improved accuracy (Ridge RMSE dropped to $5.552$, $R^2 = 0.179$), but adding style once again degraded accuracy (Ridge RMSE rose to $5.634$).
+    1. **Pure Forecasting Comparison (Ex-ante inputs only):** Comparing past performance ($Y_t$) against past performance plus style ($Y_t$ + Style). Adding style worsened Ridge RMSE from $5.581$ to $5.667$ ($R^2$ dropped from $0.169$ to $0.145$). Tactical style does not improve forward-looking forecasts.
+    2. **Retrospective Explanatory Comparison (Controlling for realized QB health):** Comparing $Y_t$ + realized QB continuity against that baseline plus style. Realized QB continuity noticeably improved accuracy (Ridge RMSE dropped to $5.552$, $R^2 = 0.179$), but adding style once again degraded accuracy (Ridge RMSE rose to $5.633$).
   * Bounded Fold 4 `eval_end` to 2023 (whose target season is 2024).
 
 ---
@@ -148,11 +140,11 @@ Each section details a specific technical divergence from our initial setup: wha
 * **What We Noticed:** Ordinary Least Squares (OLS) on stacked time-series panels violates standard independence assumptions due to serial correlation in the error terms, which can artificially inflate $t$-statistics. Additionally, `statsmodels.regression.linear_model.GLSAR` threw a runtime `KeyError: 1` when extracting parameters because `sm.add_constant()` produces a pandas Series with named indices (`'const'`, `'adoption_rate'`).
 * **Technical Resolution:** 
   * Fixed parameter extraction using positional lookups (`gls.params.iloc[1]`).
-  * Checked for autocorrelation using the **Durbin-Watson statistic** ($\text{DW} = 2.30$).
+  * Checked for autocorrelation using the **Durbin-Watson statistic** ($\text{DW} = 2.323$; a value near 2 indicates little serial correlation, so GLSAR is a precaution rather than a correction for an observed problem).
   * Estimated the regression using **Generalized Least Squares with AR(1) errors (GLSAR)**.
   * The resulting slope was negative and statistically significant:
-    $$\beta_1 = -5.467, \quad p = 0.013, \quad 95\%\text{ CI: } [-9.733, -1.202]$$
-  This empirically verified our Strategy Decay hypothesis: as the league-wide adoption of an offensive archetype expands, its performance premium systematically compresses toward zero as defensive coordinators design schematic countermeasures.
+    $$\beta_1 = -5.363, \quad p = 0.0152, \quad 95\%\text{ CI: } [-9.650, -1.076]$$
+  This is consistent with the Strategy Decay hypothesis, but it is observational: each archetype occupies its own adoption range (the tempo archetype is always rare), so the pooled slope largely reflects differences between archetypes rather than one archetype losing its edge as it spreads.
 
 ---
 
