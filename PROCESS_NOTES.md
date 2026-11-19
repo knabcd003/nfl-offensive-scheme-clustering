@@ -57,11 +57,17 @@ This document tracks how our thinking, data processing, and modeling architectur
 
 ---
 
-### 5. Regular-Season Target Normalization and Franchise Aliases
+### 5. Regular-Season Target Normalization, Franchise Aliases, and Exact Calendar Joins
 
-* **Initial Plan:** When aggregating seasonal team performance (net points per game) from game schedules, our initial pipeline aggregated all completed games in the schedule table.
-* **What We Noticed:** We realized that this included postseason games. Playoff games are only played by top-tier teams against other elite opponents. If a 13–3 team with a $+10.0$ net points per game regular season lost a blowout playoff game against another contender, their full-season average was penalized for playing an extra game against elite competition, while a 5–11 non-playoff team's metric was calculated strictly over standard regular-season games. Furthermore, historical franchise relocations (St. Louis to Los Angeles, San Diego to Los Angeles, Oakland to Las Vegas) and shifting abbreviation conventions (`JAC`/`JAX`, `WSH`/`WAS`) threatened to drop franchise continuity across years.
-* **What We Changed:** In order to create an unbiased, standardized performance target, we explicitly filtered schedules to completed regular-season games (`game_type == 'REG'`) and unified all historical franchise identifiers (`TEAM_ALIASES = {'STL': 'LA', 'SD': 'LAC', 'OAK': 'LV', 'JAC': 'JAX', 'WSH': 'WAS'}`). This ensured that point differentials were measured across standardized 16/17-game schedules and that franchise trajectories remained intact.
+* **Initial Plan:** When aggregating seasonal team performance (net points per game) from game schedules, our initial pipeline aggregated all completed games in the schedule table and used pandas row-positional `shift(-1)` to align year $t$ with year $t+1$.
+* **What We Noticed:** We noticed three separate data integrity issues:
+  1. *Playoff distortion:* Schedule tables included postseason games. Playoff games are only played by top-tier teams against other elite opponents. If a 13–3 team with a $+10.0$ net points per game regular season lost a blowout playoff game, their full-season average was penalized for playing an extra game against elite competition, while a non-playoff team's metric was calculated strictly over standard regular-season games.
+  2. *Franchise relocations and aliases:* Historical franchise moves (St. Louis to Los Angeles, San Diego to Los Angeles, Oakland to Las Vegas) and shifting abbreviation conventions (`JAC`/`JAX`, `WSH`/`WAS`) threatened to drop franchise continuity across years.
+  3. *Positional shift gaps:* Relying on `shift(-1)` within a groupby assumes perfectly continuous, unbroken season sequences. If a team or feature row was missing for a single season, `shift(-1)` would silently pair season $t$ with season $t+2$.
+* **What We Changed:** In order to resolve all three issues:
+  * We explicitly filtered schedules to completed regular-season games (`game_type == 'REG'`).
+  * We unified all franchise identifiers across both play-by-play and schedule tables (`TEAM_ALIASES = {'STL': 'LA', 'SD': 'LAC', 'OAK': 'LV', 'JAC': 'JAX', 'WSH': 'WAS'}`).
+  * In both the Markov transition table and the supervised dataset, we replaced positional row shifting with explicit calendar year checks: in transitions, we added `.query('season_next == season + 1')`, and in supervised modeling, we explicitly merged on `target_season = season + 1` with `validate='one_to_one'`.
 
 ---
 
@@ -80,18 +86,37 @@ This document tracks how our thinking, data processing, and modeling architectur
 
 ---
 
-### 7. Clarifying Forecasting vs. Retrospective QB Continuity
+### 7. Clarifying Forecasting vs. Retrospective QB Continuity and Unique Player IDs
 
-* **Initial Plan:** In our initial proposal, we identified quarterback stability as a necessary control variable to include alongside offensive style when predicting next season's performance ($Y_{t+1}$).
-* **What We Noticed:** When thinking about the real-world operational timeline of predictive sports modeling, we realized an important distinction: at the end of season $t$, an analyst knows a team's offensive style from season $t$ before season $t+1$ starts. However, you cannot know with certainty who will be the *realized* primary starting passer in season $t+1$ (due to unexpected preseason injuries, depth chart changes, or midseason trades). Realized QB continuity is technically an **ex-post retrospective control**, not an ex-ante forecast feature.
-* **What We Changed:** In order to be methodologically transparent, we separated our supervised evaluation into two distinct benchmarks:
-  1. **Pure Forecasting Comparison (Ex-ante inputs only):**
-     * We compared a forecast baseline ($Y_t$ alone) against a style-augmented forecast ($Y_t$ + fold-specific style distances).
-     * *Finding:* Adding style distances raised out-of-sample RMSE (worsening Ridge from $5.581$ to $5.666$) and lowered $R^2$ ($0.169$ to $0.145$). Tactical style does not improve forward-looking forecasts.
-  2. **Retrospective Explanatory Comparison (Controlling for realized QB health):**
-     * We compared a retrospective baseline ($Y_t$ + realized QB continuity) against that baseline plus style.
-     * *Finding:* Controlling for realized QB continuity noticeably improved predictions (Ridge RMSE dropped to $5.552$, $R^2$ rose to $0.179$), but adding style distances once again degraded accuracy (Ridge RMSE rose to $5.634$).
-  3. **Fold 4 Boundary Correction:** In our initial fold setup, Fold 4 had `eval_end: 2024`. Because 2025 has not yet occurred, 2024 rows had no target $y_{t+1}$ and were dropped. We properly bounded Fold 4 to `eval_end: 2023` (whose target season is 2024).
+* **Initial Plan:** In our initial proposal, we identified quarterback stability as a necessary control variable to include alongside offensive style when predicting next season's performance ($Y_{t+1}$), and identified QBs by their displayed text names.
+* **What We Noticed:** We identified two important methodological considerations:
+  1. *Forecasting vs. Retrospective:* At the end of season $t$, an analyst knows a team's offensive style from season $t$ before season $t+1$ starts. However, you cannot know with certainty who will be the *realized* primary starting passer in season $t+1$ (due to unexpected preseason injuries, depth chart changes, or midseason trades). Realized QB continuity is technically an **ex-post retrospective control**, not an ex-ante forecast feature.
+  2. *Player name collisions:* Merging passers on string names like `passer_player_name` (e.g. "J.Allen") can cause collisions across multiple players sharing initials and surnames.
+* **What We Changed:** In order to be methodologically transparent and data-safe:
+  * We switched from text names to `passer_player_id` to guarantee unique player tracking across seasons.
+  * We separated our supervised evaluation into two distinct benchmarks:
+    1. **Pure Forecasting Comparison (Ex-ante inputs only):**
+       * We compared a forecast baseline ($Y_t$ alone) against a style-augmented forecast ($Y_t$ + fold-specific style distances).
+       * *Finding:* Adding style distances raised out-of-sample RMSE (worsening Ridge from $5.581$ to $5.666$) and lowered $R^2$ ($0.169$ to $0.145$). Tactical style does not improve forward-looking forecasts.
+    2. **Retrospective Explanatory Comparison (Controlling for realized QB health):**
+       * We compared a retrospective baseline ($Y_t$ + realized QB continuity) against that baseline plus style.
+       * *Finding:* Controlling for realized QB continuity noticeably improved predictions (Ridge RMSE dropped to $5.552$, $R^2$ rose to $0.179$), but adding style distances once again degraded accuracy (Ridge RMSE rose to $5.634$).
+  * *Fold 4 Boundary Correction:* In our initial fold setup, Fold 4 had `eval_end: 2024`. Because 2025 has not yet occurred, 2024 rows had no target $y_{t+1}$ and were dropped. We properly bounded Fold 4 to `eval_end: 2023` (whose target season is 2024).
+
+---
+
+### 8. Archetype Index Realignment and Label Verification
+
+* **What We Noticed:** After fixing the scramble dropback calculation in the feature matrix, running `KMeans(n_clusters=3, random_state=42)` produced a slight index permutation in the resulting cluster labels: Cluster 0 remained the large short-passing cluster ($52.5\%$), but Cluster 1 was assigned to the high-tempo shotgun cluster ($8.1\%$), and Cluster 2 was assigned to the deep vertical passing cluster ($39.5\%$).
+* **What We Changed:** We verified the coordinates of the new cluster centroids and updated the dictionary mapping to ensure descriptive accuracy:
+  ```python
+  ARCHETYPES = {
+      0: 'Short-Depth Passing',
+      1: 'Shotgun / No-Huddle',
+      2: 'Deep Vertical Passing'
+  }
+  ```
+  This ensured that all longitudinal area plots, transition heatmaps, and strategy decay regressions accurately reflected the mathematical centroid coordinates.
 
 ---
 
