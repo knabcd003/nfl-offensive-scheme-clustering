@@ -175,8 +175,8 @@ Each section details a specific technical divergence from our initial setup: wha
       * *Ridge (Retrospective):* $5.569 \to 5.639$ ($+0.070$)
       * *Random Forest (Retrospective):* $5.659 \to 5.733$ ($+0.074$)
       * *LightGBM (Retrospective):* $5.650 \to 5.805$ ($+0.155$)
-    * Selected configurations consistently favored heavy regularization (Ridge $\alpha = 10.0$, LightGBM $\lambda = 15.0$) and constrained tree capacity (RF depth 3–5, min leaf 15–30), confirming that higher-capacity models rapidly overfit noise in annual team aggregates.
-    * Concluded that the null finding is structurally robust and invariant to hyperparameter optimization.
+    * Selected configurations usually favored strong regularization (Ridge selected $\alpha = 10.0$ in 3 of 4 folds, LightGBM usually preferred $\lambda = 15.0$) and constrained tree capacity (RF depth 2–5, min leaf 15–30), indicating that strong regularization was usually preferred on historical annual panels.
+    * Concluded that the null finding holds across the hyperparameter settings we tested.
 
 ---
 
@@ -187,5 +187,5 @@ Each section details a specific technical divergence from our initial setup: wha
 * **Technical Resolution:**
   * Collected all 416 out-of-sample team-season test predictions from expanding-window cross-validation using the baseline Ridge model and calculated residuals ($e_i = y_i - \hat{y}_i$).
   * **Quarterback Disruption Diagnostic:** Stratified absolute errors by QB continuity. Forecast MAE was **$4.282$** pts/game ($n=267$) when a team retained its primary starting passer, jumping to **$5.206$** pts/game ($n=149$) when the primary passer changed—a $+21.6\%$ ($+0.924$ pts/game) increase in forecasting error.
-  * **Residual Symmetry Across Archetypes:** Evaluated mean residuals by cluster assignment. Mean errors were centered near zero across all three schemes: Deep Vertical ($+0.017$), Short-Depth ($+0.003$), and Shotgun/No-Huddle ($-0.087$), proving the model suffers from no structural favoritism or bias toward any offensive scheme.
+  * **Residual Symmetry Across Archetypes:** Evaluated mean residuals by cluster assignment. Mean errors were centered near zero across all three schemes: Deep Vertical ($+0.017$), Short-Depth ($+0.003$), and Shotgun/No-Huddle ($-0.087$), suggesting the model suffers from no structural favoritism or bias toward any offensive scheme.
   * **Qualitative Audit of Extreme Outliers:** Examined the top 10 largest prediction misses. 7 out of 10 largest errors directly corresponded to major quarterback arrivals, departures, or catastrophic injuries (e.g., 2011 Broncos adding Peyton Manning, $+14.30$; 2016 Rams hiring Sean McVay and developing Jared Goff, $+13.94$; 2012 Chiefs acquiring Alex Smith and Andy Reid, $+13.90$; 2018 49ers and 2020 Cowboys recovering from season-ending injuries to Jimmy Garoppolo and Dak Prescott). This confirms empirically that unexplained variance in annual team trajectory is governed by quarterback availability and coaching transitions rather than incremental tactical adjustments.
