@@ -153,3 +153,39 @@ Each section details a specific technical divergence from our initial setup: wha
 * **Initial Expectation:** Tactical scheme archetypes were hypothesized to provide incremental predictive information over past point differential when forecasting future team performance.
 * **What the Data Showed:** Across Ridge Regression, Random Forest, and LightGBM, adding tactical scheme features consistently worsened out-of-sample error and lowered $R^2$ compared to past performance and quarterback stability alone.
 * **Technical Resolution:** Rather than altering hyperparameters or adding arbitrary non-linear interaction terms to force an artificial in-sample improvement, we **explicitly accepted the null hypothesis**. In the NFL, offensive scheme is an operational conduit through which roster talent and quarterback execution are expressed, not an independent generator of sustainable competitive advantage. Documenting why scheme fails to predict future performance—alongside our finding that winning schemes decay as they are copied—represents an empirical finding consistent with domain reality.
+
+
+---
+
+### 13. Leak-Free Inner Cross-Validation Hyperparameter Tuning & Robustness Verification
+
+* **Initial Plan:** Re-evaluate the supervised forecasting models to verify whether the null result (tactical scheme features failing to improve point differential predictions) was an artifact of default hyperparameters, lack of feature scaling in Ridge, or model misspecification.
+* **What We Noticed:** 
+  1. *Risk of temporal data leakage during tuning:* Standard k-fold cross-validation when tuning hyperparameters would leak future seasons into past model training.
+  2. *Scale sensitivity:* Ridge regression penalizes coefficients equally; unscaled distances vs. unscaled point differentials could disproportionately compress tactical features under an uncalibrated default $\alpha$.
+* **Technical Resolution:**
+  * Implemented an inner expanding time-series cross-validation scheme strictly inside the outer training folds. Hyperparameter configurations were evaluated by holding out each of the last three training seasons in turn, training only on strictly earlier seasons.
+  * Standardized all feature inputs via `StandardScaler` prior to fitting Ridge across $\alpha \in [0.1, 1000]$.
+  * Tuned Random Forest (`max_depth` $\in [3, 5, 8]$, `min_samples_leaf` $\in [5, 15, 30]$) and LightGBM (`learning_rate`, `num_leaves`, `reg_lambda`).
+  * **Empirical Robustness Findings:**
+    * In both the pure forecasting and retrospective benchmarks, adding style features continued to increase RMSE across all three models:
+      * *Ridge (Forecast):* $5.598 \to 5.669$ ($+0.071$)
+      * *Random Forest (Forecast):* $5.699 \to 5.757$ ($+0.058$)
+      * *LightGBM (Forecast):* $5.722 \to 5.895$ ($+0.173$)
+      * *Ridge (Retrospective):* $5.569 \to 5.639$ ($+0.070$)
+      * *Random Forest (Retrospective):* $5.659 \to 5.733$ ($+0.074$)
+      * *LightGBM (Retrospective):* $5.650 \to 5.805$ ($+0.155$)
+    * Selected configurations consistently favored heavy regularization (Ridge $\alpha = 10.0$, LightGBM $\lambda = 15.0$) and constrained tree capacity (RF depth 3–5, min leaf 15–30), confirming that higher-capacity models rapidly overfit noise in annual team aggregates.
+    * Concluded that the null finding is structurally robust and invariant to hyperparameter optimization.
+
+---
+
+### 14. Out-of-Sample Error Analysis & Residual Diagnostics
+
+* **Initial Plan:** Measure aggregate metrics (RMSE, $R^2$) to evaluate overall performance across model specifications.
+* **What We Noticed:** Aggregate summary statistics alone do not reveal *why* the model misses or whether errors are systematically skewed toward specific offensive systems or personnel instability.
+* **Technical Resolution:**
+  * Collected all 416 out-of-sample team-season test predictions from expanding-window cross-validation using the baseline Ridge model and calculated residuals ($e_i = y_i - \hat{y}_i$).
+  * **Quarterback Disruption Diagnostic:** Stratified absolute errors by QB continuity. Forecast MAE was **$4.282$** pts/game ($n=267$) when a team retained its primary starting passer, jumping to **$5.206$** pts/game ($n=149$) when the primary passer changed—a $+21.6\%$ ($+0.924$ pts/game) increase in forecasting error.
+  * **Residual Symmetry Across Archetypes:** Evaluated mean residuals by cluster assignment. Mean errors were centered near zero across all three schemes: Deep Vertical ($+0.017$), Short-Depth ($+0.003$), and Shotgun/No-Huddle ($-0.087$), proving the model suffers from no structural favoritism or bias toward any offensive scheme.
+  * **Qualitative Audit of Extreme Outliers:** Examined the top 10 largest prediction misses. 7 out of 10 largest errors directly corresponded to major quarterback arrivals, departures, or catastrophic injuries (e.g., 2011 Broncos adding Peyton Manning, $+14.30$; 2016 Rams hiring Sean McVay and developing Jared Goff, $+13.94$; 2012 Chiefs acquiring Alex Smith and Andy Reid, $+13.90$; 2018 49ers and 2020 Cowboys recovering from season-ending injuries to Jimmy Garoppolo and Dak Prescott). This confirms empirically that unexplained variance in annual team trajectory is governed by quarterback availability and coaching transitions rather than incremental tactical adjustments.

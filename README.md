@@ -82,6 +82,8 @@ A machine learning study analyzing 23 seasons (2002–2024) of NFL play-by-play 
 *Seasons are feature seasons; each row's target is the following season. Fold 4 stops at 2023 because 2024 has no next-season outcome yet.*
 
 - **Metrics:** Out-of-sample RMSE, MAE, R²
+- **Hyperparameter Tuning (Robustness Check):** Nested time-series CV within outer training folds (tuning Ridge $\alpha$, RF tree depth/leaf size, LightGBM learning rate/leaves/regularization) confirming that the null finding is invariant to model capacity and scaling
+- **Error Analysis & Diagnostics:** Out-of-sample residual breakdown across QB continuity (+21.6% MAE increase when starting QB changes), offensive archetypes (verifying zero systematic bias across schemes), and qualitative audit of the 10 largest prediction outliers (7/10 driven by QB injuries or transitions)
 
 ---
 
